@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marlene Spawnpunkte Tracker</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; height: 100vh; }
+        
+        #sidebar {
+            width: 320px;
+            background: #1e1e24;
+            color: #fff;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #map { flex: 1; height: 100%; }
+        
+        h1 { font-size: 1.2rem; margin-top: 0; color: #ff79c6; border-bottom: 2px solid #ff79c6; padding-bottom: 8px; }
+        p { font-size: 0.85rem; color: #a0a0a0; line-height: 1.4; }
+        
+        .spawn-list { list-style: none; padding: 0; margin-top: 15px; flex: 1; }
+        .spawn-item {
+            background: #2b2b36;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #ff79c6;
+        }
+        .spawn-info { font-size: 0.85rem; }
+        .spawn-title { font-weight: bold; color: #fff; display: block; }
+        .spawn-coords { font-size: 0.75rem; color: #8b8b9d; }
+        
+        .btn-delete {
+            background: #ff5555;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        .btn-delete:hover { background: #ff3333; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h1>Marlene Spawnpunkte</h1>
+        <p>Klicke auf die Karte, um einen neuen Spawnpunkt einzutragen. Alle Änderungen werden live synchronisiert.</p>
+        
+        <ul id="spawnList" class="spawn-list"></ul>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, push, onChildAdded, onChildRemoved, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // Deine Konfiguration aus dem Screenshot:
+        const firebaseConfig = {
+            apiKey: "AIzaSyAGjQoViLeN1b0GnUIKM...", // Dein vollständiger API-Key aus Firebase
+            authDomain: "spawnpunkte-marlene.firebaseapp.com",
+            databaseURL: "https://spawnpunkte-marlene-default-rtdb.europe-west1.firebasedatabase.app", // Nutze deine exakte DB-URL
+            projectId: "spawnpunkte-marlene",
+            storageBucket: "spawnpunkte-marlene.appspot.com",
+            messagingSenderId: "188913344181",
+            appId: "1:188913344181:web:c9a6f5af...",
+            measurementId: "G-4H67XLQ0BE"
+        };
+
+        // Firebase initialisieren
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        const spawnsRef = ref(database, 'marlene_spawns');
+
+        // Karte initialisieren (Deutschland)
+        const map = L.map('map').setView([51.1657, 10.4515], 6);
+
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+
+        const activeMarkers = {};
+
+        // Punkt aus Firebase auf der Karte anzeigen
+        onChildAdded(spawnsRef, (snapshot) => {
+            const id = snapshot.key;
+            const spawn = snapshot.val();
+
+            const marker = L.marker([spawn.lat, spawn.lng])
+                .addTo(map)
+                .bindPopup(`<b>Marlene Spawn</b><br>${spawn.note}<br><small>${spawn.lat}, ${spawn.lng}</small>`);
+            
+            activeMarkers[id] = marker;
+
+            const listElement = document.getElementById('spawnList');
+            const li = document.createElement('li');
+            li.id = `list-${id}`;
+            li.className = 'spawn-item';
+            li.innerHTML = `
+                <div class="spawn-info">
+                    <span class="spawn-title">${spawn.note}</span>
+                    <span class="spawn-coords">${spawn.lat}, ${spawn.lng}</span>
+                </div>
+                <button class="btn-delete" id="btn-${id}">X</button>
+            `;
+            listElement.appendChild(li);
+
+            // Löschen-Button Event anhängen
+            document.getElementById(`btn-${id}`).addEventListener('click', () => {
+                deleteSpawn(id);
+            });
+        });
+
+        // Punkt entfernen, wenn er in Firebase gelöscht wird
+        onChildRemoved(spawnsRef, (snapshot) => {
+            const id = snapshot.key;
+
+            if (activeMarkers[id]) {
+                map.removeLayer(activeMarkers[id]);
+                delete activeMarkers[id];
+            }
+
+            const listItem = document.getElementById(`list-${id}`);
+            if (listItem) {
+                listItem.remove();
+            }
+        });
+
+        // Klick auf die Karte -> Punkt in Firebase speichern
+        map.on('click', function(e) {
+            const lat = e.latlng.lat.toFixed(5);
+            const lng = e.latlng.lng.toFixed(5);
+
+            const note = prompt("Notiz zum Marlene-Spawn:", "Marlene Spawn");
+
+            if (note) {
+                push(spawnsRef, {
+                    lat: lat,
+                    lng: lng,
+                    note: note
+                });
+            }
+        });
+
+        // Einzellnen Spawn löschen
+        function deleteSpawn(id) {
+            const spawnToDeleteRef = ref(database, `marlene_spawns/${id}`);
+            remove(spawnToDeleteRef);
+        }
+    </script>
+</body>
+</html>
