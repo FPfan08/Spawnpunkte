@@ -9,20 +9,49 @@
     
     <style>
         * { box-sizing: border-box; }
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; height: 100vh; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; height: 100vh; overflow: hidden; }
         
+        /* Toggle-Button für Mobilgeräte */
+        .toggle-btn {
+            display: flex;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1001;
+            background: #1e1e24;
+            color: #ff79c6;
+            border: 1px solid #ff79c6;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+
+        /* Sidebar Styling für Handy (Standardmäßig eingeklappt) */
         #sidebar {
+            position: absolute;
+            top: 0;
+            left: -320px;
             width: 320px;
+            height: 100%;
             background: #1e1e24;
             color: #fff;
-            padding: 20px;
+            padding: 60px 20px 20px 20px;
             overflow-y: auto;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
             display: flex;
             flex-direction: column;
+            transition: left 0.3s ease;
+            z-index: 1000;
         }
         
-        #map { flex: 1; height: 100%; }
+        /* Klasse zum Einblenden der Sidebar */
+        #sidebar.open {
+            left: 0;
+        }
+
+        #map { flex: 1; height: 100%; width: 100%; }
         
         h1 { font-size: 1.2rem; margin-top: 0; color: #ff79c6; border-bottom: 2px solid #ff79c6; padding-bottom: 8px; }
         p { font-size: 0.85rem; color: #a0a0a0; line-height: 1.4; }
@@ -52,9 +81,21 @@
             font-size: 0.75rem;
         }
         .btn-delete:hover { background: #ff3333; }
+
+        /* Desktop-Ansicht: Button ausblenden, Sidebar fest verankern */
+        @media (min-width: 768px) {
+            .toggle-btn { display: none; }
+            #sidebar {
+                position: relative;
+                left: 0;
+                padding-top: 20px;
+            }
+        }
     </style>
 </head>
 <body>
+
+    <button class="toggle-btn" id="menuToggle">☰</button>
 
     <div id="sidebar">
         <h1>Marlene Spawnpunkte</h1>
@@ -71,11 +112,27 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, push, onChildAdded, onChildRemoved, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // Deine Konfiguration aus dem Screenshot:
+        // Sidebar Toggle-Funktionalität
+        const sidebar = document.getElementById('sidebar');
+        const menuToggle = document.getElementById('menuToggle');
+
+        menuToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.classList.toggle('open');
+        });
+
+        // Schließen bei Klick außerhalb der Sidebar (auf Mobilgeräten)
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth < 768 && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
+                sidebar.classList.remove('open');
+            }
+        });
+
+        // Firebase Konfiguration
         const firebaseConfig = {
-            apiKey: "AIzaSyAGjQoViLeN1b0GnUIKM...", // Dein vollständiger API-Key aus Firebase
+            apiKey: "AIzaSyAGjQoViLeN1b0GnUIKM...", 
             authDomain: "spawnpunkte-marlene.firebaseapp.com",
-            databaseURL: "https://spawnpunkte-marlene-default-rtdb.europe-west1.firebasedatabase.app", // Nutze deine exakte DB-URL
+            databaseURL: "https://spawnpunkte-marlene-default-rtdb.europe-west1.firebasedatabase.app",
             projectId: "spawnpunkte-marlene",
             storageBucket: "spawnpunkte-marlene.appspot.com",
             messagingSenderId: "188913344181",
@@ -83,12 +140,10 @@
             measurementId: "G-4H67XLQ0BE"
         };
 
-        // Firebase initialisieren
         const app = initializeApp(firebaseConfig);
         const database = getDatabase(app);
         const spawnsRef = ref(database, 'marlene_spawns');
 
-        // Karte initialisieren (Deutschland)
         const map = L.map('map').setView([51.1657, 10.4515], 6);
 
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -98,7 +153,6 @@
 
         const activeMarkers = {};
 
-        // Punkt aus Firebase auf der Karte anzeigen
         onChildAdded(spawnsRef, (snapshot) => {
             const id = snapshot.key;
             const spawn = snapshot.val();
@@ -122,13 +176,11 @@
             `;
             listElement.appendChild(li);
 
-            // Löschen-Button Event anhängen
             document.getElementById(`btn-${id}`).addEventListener('click', () => {
                 deleteSpawn(id);
             });
         });
 
-        // Punkt entfernen, wenn er in Firebase gelöscht wird
         onChildRemoved(spawnsRef, (snapshot) => {
             const id = snapshot.key;
 
@@ -143,7 +195,6 @@
             }
         });
 
-        // Klick auf die Karte -> Punkt in Firebase speichern
         map.on('click', function(e) {
             const lat = e.latlng.lat.toFixed(5);
             const lng = e.latlng.lng.toFixed(5);
@@ -159,7 +210,6 @@
             }
         });
 
-        // Einzellnen Spawn löschen
         function deleteSpawn(id) {
             const spawnToDeleteRef = ref(database, `marlene_spawns/${id}`);
             remove(spawnToDeleteRef);
