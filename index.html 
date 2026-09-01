@@ -11,45 +11,46 @@
         * { box-sizing: border-box; }
         body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; height: 100vh; overflow: hidden; }
         
-        /* Button zum Ein-/Ausklappen */
-        #toggle-btn {
+        /* Toggle-Button für Mobilgeräte */
+        .toggle-btn {
+            display: flex;
             position: absolute;
-            top: 12px;
-            left: 12px;
+            top: 10px;
+            left: 10px;
             z-index: 1001;
             background: #1e1e24;
             color: #ff79c6;
-            border: 2px solid #ff79c6;
+            border: 1px solid #ff79c6;
             padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 1.2rem;
+            border-radius: 6px;
             cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            font-size: 1.2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
 
-        /* Seitenleiste (standardmäßig ausgefahren auf Desktop, eingeklappt auf Mobilgeräten) */
+        /* Sidebar Styling für Handy (Standardmäßig eingeklappt) */
         #sidebar {
             position: absolute;
             top: 0;
-            left: 0;
-            width: 300px;
+            left: -320px;
+            width: 320px;
             height: 100%;
             background: #1e1e24;
             color: #fff;
-            padding: 60px 15px 20px 15px;
+            padding: 60px 20px 20px 20px;
             overflow-y: auto;
             box-shadow: 2px 0 10px rgba(0,0,0,0.5);
             display: flex;
             flex-direction: column;
+            transition: left 0.3s ease;
             z-index: 1000;
-            transition: transform 0.3s ease-in-out;
-        }
-
-        /* Klasse zum Verstecken der Seitenleiste */
-        #sidebar.collapsed {
-            transform: translateX(-100%);
         }
         
+        /* Klasse zum Einblenden der Sidebar */
+        #sidebar.open {
+            left: 0;
+        }
+
         #map { flex: 1; height: 100%; width: 100%; }
         
         h1 { font-size: 1.2rem; margin-top: 0; color: #ff79c6; border-bottom: 2px solid #ff79c6; padding-bottom: 8px; }
@@ -74,28 +75,31 @@
             background: #ff5555;
             color: white;
             border: none;
-            padding: 6px 10px;
+            padding: 4px 8px;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }
         .btn-delete:hover { background: #ff3333; }
 
-        /* Smartphone-Anpassungen (Bildschirmbreite unter 768px) */
-        @media (max-width: 768px) {
+        /* Desktop-Ansicht: Button ausblenden, Sidebar fest verankern */
+        @media (min-width: 768px) {
+            .toggle-btn { display: none; }
             #sidebar {
-                width: 85%; /* Nimmt nicht mehr den ganzen Bildschirm ein */
+                position: relative;
+                left: 0;
+                padding-top: 20px;
             }
         }
     </style>
 </head>
 <body>
 
-    <button id="toggle-btn" onclick="toggleSidebar()">☰</button>
+    <button class="toggle-btn" id="menuToggle">☰</button>
 
-    <div id="sidebar" class="collapsed">
+    <div id="sidebar">
         <h1>Marlene Spawnpunkte</h1>
-        <p>Klicke auf die Karte, um einen neuen Spawnpunkt einzutragen.</p>
+        <p>Klicke auf die Karte, um einen neuen Spawnpunkt einzutragen. Alle Änderungen werden live synchronisiert.</p>
         
         <ul id="spawnList" class="spawn-list"></ul>
     </div>
@@ -108,8 +112,25 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, push, onChildAdded, onChildRemoved, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
+        // Sidebar Toggle-Funktionalität
+        const sidebar = document.getElementById('sidebar');
+        const menuToggle = document.getElementById('menuToggle');
+
+        menuToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.classList.toggle('open');
+        });
+
+        // Schließen bei Klick außerhalb der Sidebar (auf Mobilgeräten)
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth < 768 && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
+                sidebar.classList.remove('open');
+            }
+        });
+
+        // Firebase Konfiguration
         const firebaseConfig = {
-            apiKey: "AIzaSyAGjQoViLeN1b0GnUIKM...", // Dein vollständiger API-Key aus Firebase
+            apiKey: "AIzaSyAGjQoViLeN1b0GnUIKM...", 
             authDomain: "spawnpunkte-marlene.firebaseapp.com",
             databaseURL: "https://spawnpunkte-marlene-default-rtdb.europe-west1.firebasedatabase.app",
             projectId: "spawnpunkte-marlene",
@@ -131,19 +152,6 @@
         }).addTo(map);
 
         const activeMarkers = {};
-
-        // Funktion zum Ein-/Ausklappen der Seitenleiste
-        window.toggleSidebar = function() {
-            const sidebar = document.getElementById('sidebar');
-            const btn = document.getElementById('toggle-btn');
-            sidebar.classList.toggle('collapsed');
-            
-            if (sidebar.classList.contains('collapsed')) {
-                btn.innerHTML = '☰';
-            } else {
-                btn.innerHTML = '✕';
-            }
-        };
 
         onChildAdded(spawnsRef, (snapshot) => {
             const id = snapshot.key;
